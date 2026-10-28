@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: otel-demo
+
+resources:
+  - ../../base
+  - ingress.yaml
+
+# GitHub Actions rewrites newName and newTag on every successful build of
+# src/ad. The short name "ad" matches the image field in the Deployment.
+images:
+  - name: ad
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/otel-demo-ad
+    newTag: bootstrap

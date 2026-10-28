@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: otel-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/part-of: otel-demo
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/open-telemetry/demo:2.2.0-frontend
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: FRONTEND_PORT
+              value: "8080"
+            - name: PORT
+              value: "8080"
+            - name: AD_ADDR
+              value: ad:8080
+            - name: CART_ADDR
+              value: cart:8080
+            - name: CURRENCY_ADDR
+              value: currency:8080
+            - name: PRODUCT_CATALOG_ADDR
+              value: product-catalog:8080
+            - name: RECOMMENDATION_ADDR
+              value: recommendation:8080
+            - name: FLAGD_HOST
+              value: flagd
+            - name: FLAGD_PORT
+              value: "8013"
+            - name: ENV_PLATFORM
+              value: kubernetes
+            - name: OTEL_SERVICE_NAME
+              value: frontend
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4317
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 300Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: otel-demo
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

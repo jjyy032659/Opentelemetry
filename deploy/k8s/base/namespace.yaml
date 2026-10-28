@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: otel-demo
+  labels:
+    # baseline rejects privileged pods. restricted would reject several of the
+    # upstream images, which still run as root.
+    pod-security.kubernetes.io/enforce: baseline

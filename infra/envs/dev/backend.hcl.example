@@ -1,0 +1,5 @@
+bucket         = "otel-gitops-ACCOUNT_ID-tfstate"
+key            = "envs/dev/terraform.tfstate"
+region         = "ap-southeast-2"
+dynamodb_table = "otel-gitops-tf-locks"
+encrypt        = true

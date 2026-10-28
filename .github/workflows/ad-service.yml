@@ -1,0 +1,147 @@
+name: Ad service
+
+# Builds and tests the Java ad service. On main it pushes an immutable image
+# to ECR and commits the new tag into the dev overlay. Argo CD deploys that
+# commit. Pull requests build the image and do not push it.
+on:
+  pull_request:
+    paths:
+      - "src/ad/**"
+      - "pb/**"
+      - ".dockerignore"
+      - ".github/workflows/ad-service.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/ad/**"
+      - "pb/**"
+      - ".dockerignore"
+      - ".github/workflows/ad-service.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ad-service-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Validate the Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Run unit tests
+        working-directory: src/ad
+        run: ./gradlew test --no-daemon
+
+  image:
+    name: Build and publish
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      actions: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Decide whether this run publishes
+        id: publish
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && { [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; }; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require the repository variables used to publish
+        if: steps.publish.outputs.enabled == 'true'
+        run: |
+          test -n "${{ vars.AWS_ROLE_ARN }}" || { echo "Set the AWS_ROLE_ARN repository variable to the ad CI role ARN."; exit 1; }
+          test -n "${{ vars.AWS_REGION }}" || { echo "Set the AWS_REGION repository variable, for example ap-southeast-2."; exit 1; }
+          test -n "${{ vars.ECR_REPOSITORY }}" || { echo "Set the ECR_REPOSITORY repository variable to otel-demo-ad."; exit 1; }
+
+      - name: Configure AWS credentials
+        if: steps.publish.outputs.enabled == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: steps.publish.outputs.enabled == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Check whether this commit is already in ECR
+        if: steps.publish.outputs.enabled == 'true'
+        id: existing
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          if aws ecr describe-images \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-ids "imageTag=${{ github.sha }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/ad/Dockerfile
+          # A re-run of the same commit must not try to replace an immutable tag.
+          push: ${{ steps.publish.outputs.enabled == 'true' && steps.existing.outputs.exists != 'true' }}
+          provenance: false
+          tags: ${{ steps.publish.outputs.enabled == 'true' && format('{0}/{1}:{2}', steps.ecr.outputs.registry, vars.ECR_REPOSITORY, github.sha) || format('otel-demo-ad:{0}', github.sha) }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            OTEL_JAVA_AGENT_VERSION=2.25.0
+
+      - name: Install kustomize
+        if: steps.publish.outputs.enabled == 'true'
+        run: |
+          curl -fsSL -o /tmp/kustomize.tgz \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.7.1/kustomize_v5.7.1_linux_amd64.tar.gz"
+          sudo tar -xzf /tmp/kustomize.tgz -C /usr/local/bin kustomize
+
+      - name: Commit the image tag into the dev overlay
+        if: steps.publish.outputs.enabled == 'true'
+        env:
+          ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          image="${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ github.sha }}"
+          cd deploy/k8s/overlays/dev
+          kustomize edit set image "ad=${image}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "Dev overlay already points at ${image}."
+            exit 0
+          fi
+          git commit -m "chore(ad): deploy ${{ github.sha }}"
+          git push

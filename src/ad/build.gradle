@@ -61,6 +61,11 @@ dependencies {
                 "com.fasterxml.jackson.core:jackson-databind:${jacksonVersion}",
                 "io.netty:netty-tcnative-boringssl-static:2.0.75.Final"
     }
+
+    // Unit tests for the small helpers in this service. The CI workflow runs
+    // `./gradlew test` before it builds the image.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }
 
 // Default protoSourceDir is in /opentelemetry-demo/pb. Optionally override the
@@ -151,6 +156,10 @@ distributions {
             }
         }
     }
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
 }
 
 // Fix implicit dependency issues in Gradle 9

@@ -1,0 +1,19 @@
+# Argo CD for a two-node dev cluster.
+#
+# Dex and the notifications controller are off. This install has one human
+# user and does not send deploy chat messages. The UI is reached with
+# kubectl port-forward, so the server speaks plain HTTP inside the cluster.
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+configs:
+  params:
+    server.insecure: "true"
+
+server:
+  service:
+    type: ClusterIP
