@@ -1,0 +1,23 @@
+clusterName: ${cluster_name}
+region: ${region}
+vpcId: ${vpc_id}
+
+# The chart's default is two replicas. The webhook failure policy is Fail, so
+# a single unhealthy replica can block new Ingress objects. Two replicas on a
+# two-node cluster is the smaller safe choice.
+replicaCount: 2
+
+serviceAccount:
+  create: true
+  # This name is part of the IRSA trust policy. Do not rename it without
+  # editing infra/modules/iam/irsa.tf.
+  name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: ${role_arn}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

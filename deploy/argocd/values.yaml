@@ -1,0 +1,23 @@
+# Argo CD for a two-node dev cluster.
+#
+# Dex and the notifications controller are off. This install has one human
+# user and does not send deploy chat messages. The UI is reached with
+# kubectl port-forward, so the server speaks plain HTTP inside the cluster.
+
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+configs:
+  params:
+    server.insecure: "true"
+  cm:
+    # The dev overlay reads src/flagd, src/postgresql, and otel-config.yml,
+    # which sit outside deploy/k8s. Kustomize refuses that unless this is set.
+    kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone"
+
+server:
+  service:
+    type: ClusterIP

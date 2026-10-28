@@ -1,0 +1,131 @@
+name: Terraform
+
+# Formats, lints, and validates the stacks on every pull request that touches
+# infra/. When the repository variables below are set, a pull request also
+# runs `terraform plan` for the dev stack. The plan role cannot apply.
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.0"
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive infra
+
+      - name: Set up tflint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.65.0
+
+      - name: Initialise tflint plugins
+        working-directory: infra
+        run: tflint --init
+
+      - name: Run tflint
+        working-directory: infra
+        run: tflint --recursive
+
+  validate:
+    name: Validate ${{ matrix.stack }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stack: bootstrap
+            dir: infra/bootstrap
+          - stack: dev
+            dir: infra/envs/dev
+          - stack: dev-platform
+            dir: infra/envs/dev-platform
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.0"
+
+      - name: Initialise without a backend
+        working-directory: ${{ matrix.dir }}
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        working-directory: ${{ matrix.dir }}
+        run: terraform validate
+
+  plan:
+    name: Plan dev
+    # The bootstrap stack uses a local backend, so there is nothing for CI to
+    # plan. The platform stack needs a live API server. Dev is the stack whose
+    # plan is useful on a pull request.
+    if: github.event_name == 'pull_request' && vars.AWS_TERRAFORM_ROLE_ARN != '' && vars.TF_STATE_BUCKET != '' && vars.TF_VAR_HOSTED_ZONE_ID != '' && vars.TF_VAR_APP_HOSTNAME != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || 'ap-southeast-2' }}
+      TF_VAR_region: ${{ vars.AWS_REGION != '' && vars.AWS_REGION || 'ap-southeast-2' }}
+      TF_VAR_github_owner: ${{ github.repository_owner }}
+      TF_VAR_github_repo: ${{ github.event.repository.name }}
+      TF_VAR_state_bucket_name: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_lock_table_name: ${{ vars.TF_LOCK_TABLE != '' && vars.TF_LOCK_TABLE || 'otel-gitops-tf-locks' }}
+      TF_VAR_hosted_zone_id: ${{ vars.TF_VAR_HOSTED_ZONE_ID }}
+      TF_VAR_app_hostname: ${{ vars.TF_VAR_APP_HOSTNAME }}
+      TF_VAR_create_github_oidc_provider: ${{ vars.TF_VAR_CREATE_GITHUB_OIDC_PROVIDER != '' && vars.TF_VAR_CREATE_GITHUB_OIDC_PROVIDER || 'true' }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.0"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Initialise the dev backend
+        working-directory: infra/envs/dev
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=envs/dev/terraform.tfstate" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ env.TF_VAR_lock_table_name }}" \
+            -backend-config="encrypt=true"
+
+      - name: Plan
+        working-directory: infra/envs/dev
+        run: terraform plan -input=false -no-color

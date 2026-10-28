@@ -17,6 +17,18 @@ src/*/*/Dockerfile
 # frontend
 ./src/frontend/node_modules/
 
+# The ad image is built from the repository root. Keep its context small.
+.git
+.github
+infra
+deploy
+docs
+kubernetes
+scripts
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+
 ###################################
 # shipping
 ./src/shipping/target

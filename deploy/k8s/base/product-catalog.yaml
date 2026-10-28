@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-catalog
+  labels:
+    app.kubernetes.io/name: product-catalog
+    app.kubernetes.io/part-of: otel-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: product-catalog
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: product-catalog
+        app.kubernetes.io/part-of: otel-demo
+    spec:
+      initContainers:
+        - name: wait-for-postgresql
+          image: postgres:17.8
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgresql -p 5432; do echo waiting for postgresql; sleep 2; done
+      containers:
+        - name: product-catalog
+          image: ghcr.io/open-telemetry/demo:2.2.0-product-catalog
+          ports:
+            - name: grpc
+              containerPort: 8080
+          env:
+            - name: PRODUCT_CATALOG_PORT
+              value: "8080"
+            - name: DB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql
+                  key: DATABASE_URL
+            - name: FLAGD_HOST
+              value: flagd
+            - name: FLAGD_PORT
+              value: "8013"
+            - name: OTEL_SERVICE_NAME
+              value: product-catalog
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector:4317
+            - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+              value: cumulative
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=product-catalog,service.namespace=otel-demo
+            - name: OTEL_CONFIG_FILE
+              value: /otel-config.yml
+            - name: GOMEMLIMIT
+              value: 64MiB
+          volumeMounts:
+            - name: otel-config
+              mountPath: /otel-config.yml
+              subPath: otel-config.yml
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: otel-config
+          configMap:
+            name: product-catalog-otel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-catalog
+  labels:
+    app.kubernetes.io/name: product-catalog
+    app.kubernetes.io/part-of: otel-demo
+spec:
+  selector:
+    app.kubernetes.io/name: product-catalog
+  ports:
+    - name: grpc
+      port: 8080
+      targetPort: grpc

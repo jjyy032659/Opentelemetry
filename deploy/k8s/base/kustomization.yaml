@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: otel-demo
+
+resources:
+  - namespace.yaml
+  - otel-collector.yaml
+  - postgresql.yaml
+  - flagd.yaml
+  - currency.yaml
+  - product-catalog.yaml
+  - recommendation.yaml
+  - ad.yaml
+  - cart.yaml
+  - valkey.yaml
+  - frontend.yaml
+
+# These files live with the demo source, outside this directory. Build with
+# `kustomize build --load-restrictor LoadRestrictionsNone`. Argo CD is given
+# the same flag in deploy/argocd/values.yaml.
+configMapGenerator:
+  - name: otel-collector-config
+    files:
+      - config.yaml=otel-collector-config.yaml
+  - name: flagd-config
+    files:
+      - demo.flagd.json=../../../src/flagd/demo.flagd.json
+  - name: postgres-init
+    files:
+      - init.sql=../../../src/postgresql/init.sql
+  - name: product-catalog-otel
+    files:
+      - otel-config.yml=../../../otel-config.yml
