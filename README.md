@@ -389,6 +389,12 @@ and the alias resource uses `count` so it is absent until you know the name.
 external-dns would create the alias from inside the cluster. This project keeps
 the record in Terraform so there is one place that owns DNS.
 
+**The flag file and the SQL schema are not copied into `deploy/`.** Kustomize
+refuses to read a file outside its own directory unless you pass
+`--load-restrictor LoadRestrictionsNone`. Argo CD is given that flag in
+`deploy/argocd/values.yaml`, and `scripts/validate.sh` passes it too. The files
+stay next to the demo so there is one copy to edit.
+
 **Argo CD prunes and self-heals.** `prune: true` deletes objects you removed
 from git. `selfHeal: true` reverts a manual `kubectl edit`. A bad image is
 reverted by reverting the tag commit, not by editing the cluster. The
@@ -506,7 +512,7 @@ empty Gradle task.
 | Certificate stays pending | The hosted zone is not the one the registrar delegates to |
 | `ad` is `ImagePullBackOff` | The overlay still says `ACCOUNT_ID`, or the `bootstrap` tag was never pushed |
 | Ingress has no address | The controller pod in `kube-system`, then its logs. IRSA subject and the certificate ARN are the usual causes |
-| Argo CD `ComparisonError` | The repo URL or visibility. Private repos need a repository secret |
+| Argo CD `ComparisonError` or a kustomize security error | The repo URL, or `kustomize.buildOptions` missing from the Argo CD config. Private repos need a repository secret |
 | `terraform destroy` fails on the VPC | A load balancer or ENI is still attached. Delete the ingress first and retry |
 | product-catalog crash loop | `kubectl logs` the pod. The database URL and `init.sql` have to match. If the image rejects `OTEL_CONFIG_FILE`, remove that env var and the volume |
 

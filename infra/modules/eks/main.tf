@@ -8,6 +8,11 @@ locals {
 resource "aws_iam_role" "cluster" {
   name = "${var.cluster_name}-cluster"
 
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+  }
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -28,6 +33,11 @@ resource "aws_iam_role_policy_attachment" "cluster" {
 # the cluster. Pods that need their own AWS permissions use IRSA instead.
 resource "aws_iam_role" "node" {
   name = "${var.cluster_name}-node"
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+  }
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -75,6 +85,11 @@ resource "aws_eks_cluster" "this" {
 
   # Control plane logs are left off. They land in CloudWatch and add a bill
   # that this dev cluster does not need. Turn them on when debugging the API.
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
+  }
 
   depends_on = [aws_iam_role_policy_attachment.cluster]
 
@@ -126,6 +141,11 @@ resource "aws_eks_node_group" "default" {
 
   update_config {
     max_unavailable = 1
+  }
+
+  tags = {
+    Project     = var.project
+    Environment = var.environment
   }
 
   # Apply sets the size once. A later manual scale is not reverted.

@@ -16,6 +16,9 @@ resources:
   - valkey.yaml
   - frontend.yaml
 
+# These files live with the demo source, outside this directory. Build with
+# `kustomize build --load-restrictor LoadRestrictionsNone`. Argo CD is given
+# the same flag in deploy/argocd/values.yaml.
 configMapGenerator:
   - name: otel-collector-config
     files:

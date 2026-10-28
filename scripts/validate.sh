@@ -26,7 +26,7 @@ else
 fi
 
 echo "== kustomize build | kubeconform =="
-kustomize build deploy/k8s/overlays/dev | kubeconform \
+kustomize build --load-restrictor LoadRestrictionsNone deploy/k8s/overlays/dev | kubeconform \
   -kubernetes-version 1.35.0 \
   -strict \
   -summary \

@@ -41,12 +41,16 @@ FROM eclipse-temurin:${JAVA_VERSION}-jdk AS agent
 ARG OTEL_JAVA_AGENT_VERSION
 
 # Downloaded here so the runtime stage does not need curl or a package manager.
-ADD --chmod=644 https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVA_AGENT_VERSION}/opentelemetry-javaagent.jar /opentelemetry-javaagent.jar
+# Plain ADD, not ADD --chmod: --chmod needs BuildKit, and a laptop `docker build`
+# should work with the default builder as well as GitHub Actions.
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVA_AGENT_VERSION}/opentelemetry-javaagent.jar /opentelemetry-javaagent.jar
 
 FROM eclipse-temurin:${JAVA_VERSION}-jre AS runtime
 
-RUN groupadd --system --gid 10001 app \
-    && useradd --system --uid 10001 --gid app --home-dir /usr/src/app --shell /usr/sbin/nologin app
+# A normal user, not --system: a uid above 999 makes useradd warn when
+# --system is set, and 10001 keeps the process well clear of system accounts.
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --home-dir /usr/src/app --shell /usr/sbin/nologin --no-log-init app
 
 WORKDIR /usr/src/app
 

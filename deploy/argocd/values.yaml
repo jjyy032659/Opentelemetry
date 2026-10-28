@@ -13,6 +13,10 @@ notifications:
 configs:
   params:
     server.insecure: "true"
+  cm:
+    # The dev overlay reads src/flagd, src/postgresql, and otel-config.yml,
+    # which sit outside deploy/k8s. Kustomize refuses that unless this is set.
+    kustomize.buildOptions: "--load-restrictor LoadRestrictionsNone"
 
 server:
   service:

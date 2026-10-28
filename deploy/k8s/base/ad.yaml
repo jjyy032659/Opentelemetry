@@ -63,6 +63,8 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
+            # Netty unpacks a native library under /tmp, so this mount has to
+            # be writable and executable. An emptyDir is both, by default.
             - name: tmp
               mountPath: /tmp
           resources:
